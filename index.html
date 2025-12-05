@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Screen Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .controls {
+            background: rgba(18, 18, 29, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 20px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 0 30px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #64ffda;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 0;
+        }
+
+        h1::before {
+            content: "🖥️";
+            font-size: 32px;
+            filter: drop-shadow(0 0 8px rgba(100, 255, 218, 0.3));
+        }
+
+        .connection-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            padding: 8px 16px;
+            border-radius: 25px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ff5252;
+            box-shadow: 0 0 10px #ff5252;
+            transition: all 0.3s ease;
+        }
+
+        .status-dot.connected {
+            background: #4caf50;
+            box-shadow: 0 0 15px #4caf50;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
+        .btn {
+            padding: 10px 24px;
+            font-size: 15px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(245, 87, 108, 0.4);
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(245, 87, 108, 0.6);
+        }
+
+        .monitors-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        .monitor-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: #e0e0e0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 10px 20px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .monitor-btn:hover {
+            background: rgba(100, 255, 218, 0.1);
+            border-color: #64ffda;
+            transform: translateY(-1px);
+        }
+
+        .monitor-btn.active {
+            background: rgba(100, 255, 218, 0.2);
+            border-color: #64ffda;
+            color: #64ffda;
+            box-shadow: 0 0 15px rgba(100, 255, 218, 0.3);
+        }
+
+        #viewer-container {
+            flex: 1;
+            background: #000;
+            position: relative;
+            overflow: hidden;
+            min-height: calc(100vh - 200px);
+        }
+
+        #screenCanvas {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #64ffda;
+            font-size: 20px;
+            text-align: center;
+            display: none;
+            z-index: 100;
+        }
+
+        .loading::after {
+            content: '';
+            display: block;
+            width: 50px;
+            height: 50px;
+            margin: 20px auto 0;
+            border: 3px solid transparent;
+            border-top: 3px solid #64ffda;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .error {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff5252;
+            text-align: center;
+            padding: 30px;
+            background: rgba(18, 18, 29, 0.9);
+            border-radius: 15px;
+            border: 1px solid rgba(255, 82, 82, 0.3);
+            display: none;
+            z-index: 100;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .error h3 {
+            margin-bottom: 15px;
+            color: #ff5252;
+        }
+
+        .status-bar {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            color: #aaa;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #64ffda;
+        }
+
+        .quality-control {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 12px 20px;
+            border-radius: 10px;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .quality-control label {
+            font-size: 14px;
+            color: #aaa;
+        }
+
+        .quality-control input[type="range"] {
+            width: 150px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .quality-control input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #64ffda;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(100, 255, 218, 0.5);
+        }
+
+        .quality-value {
+            font-size: 14px;
+            color: #64ffda;
+            font-weight: 600;
+            min-width: 30px;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 15px;
+            }
+
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .connection-info {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .btn {
+                padding: 8px 16px;
+                font-size: 14px;
+            }
+
+            .status-bar,
+            .quality-control {
+                position: static;
+                margin: 10px;
+                width: calc(100% - 20px);
+            }
+
+            .status-bar {
+                bottom: 100px;
+                left: 10px;
+                right: 10px;
+                width: auto;
+            }
+
+            .quality-control {
+                bottom: 10px;
+                left: 10px;
+                right: 10px;
+                width: auto;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Панель управления -->
+    <div class="controls">
+        <div class="container">
+            <div class="header">
+                <h1>Screen Viewer</h1>
+                <div class="connection-info">
+                    <div class="connection-status">
+                        <div class="status-dot" id="statusDot"></div>
+                        <span id="statusText">Отключено</span>
+                    </div>
+                    <button class="btn btn-primary" onclick="connect()" id="connectBtn">
+                        <span>🔄</span>
+                        Подключиться
+                    </button>
+                    <button class="btn btn-danger" onclick="stop()" id="stopBtn" disabled>
+                        <span>⏹️</span>
+                        Стоп
+                    </button>
+                </div>
+            </div>
+            <div id="monitors" class="monitors-container">
+                <!-- Кнопки мониторов появятся здесь -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Основная область просмотра -->
+    <div id="viewer-container">
+        <div class="loading" id="loading">Загрузка мониторов...</div>
+        <div class="error" id="error">
+            <h3>Ошибка подключения</h3>
+            <p>Не удалось подключиться к серверу.</p>
+            <p>Убедитесь, что сервер запущен и доступен.</p>
+        </div>
+        <canvas id="screenCanvas"></canvas>
+
+        <!-- Панель статуса -->
+        <div class="status-bar" id="statusBar">
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-label">Монитор</div>
+                    <div class="stat-value" id="currentMonitor">-</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">FPS</div>
+                    <div class="stat-value" id="fpsValue">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Разрешение</div>
+                    <div class="stat-value" id="resolution">0x0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Контроль качества -->
+        <div class="quality-control">
+            <label for="quality">Качество:</label>
+            <input type="range" id="quality" min="10" max="100" value="70" step="5">
+            <span class="quality-value" id="qualityValue">70%</span>
+        </div>
+    </div>
+
+
+    <script>
+        // Глобальные переменные
+        let currentMonitor = null;
+        let retryCount = 0;
+        const maxRetries = 5;
+        let abortController = null;
+        let isStreaming = false;
+        let quality = 70;
+        let monitorsData = []; // Храним данные о мониторах
+
+        // Таймер для контроля частоты запросов
+        let frameTimer = null;
+        const TARGET_FPS = 1; // 1 кадр в секунду
+        const FRAME_INTERVAL = 1000 / TARGET_FPS; // 1000 мс
+
+        // Элементы DOM
+        const canvas = document.getElementById("screenCanvas");
+        const ctx = canvas.getContext("2d");
+        const statusDot = document.getElementById("statusDot");
+        const statusText = document.getElementById("statusText");
+        const connectBtn = document.getElementById("connectBtn");
+        const stopBtn = document.getElementById("stopBtn");
+        const loading = document.getElementById("loading");
+        const error = document.getElementById("error");
+        const currentMonitorEl = document.getElementById("currentMonitor");
+        const fpsValue = document.getElementById("fpsValue");
+        const resolution = document.getElementById("resolution");
+        const qualityInput = document.getElementById("quality");
+        const qualityValue = document.getElementById("qualityValue");
+
+        // Счётчики производительности
+        let frameCount = 0;
+        let lastTime = performance.now();
+        let fps = 0;
+        let lastFrameTime = 0;
+        let avgFrameTime = 0;
+
+        // Обновление статуса подключения
+        function updateConnectionStatus(connected) {
+            statusDot.classList.toggle('connected', connected);
+            statusText.textContent = connected ? 'Подключено' : 'Отключено';
+            connectBtn.disabled = connected;
+            stopBtn.disabled = !connected;
+        }
+
+        // Подключение к серверу
+        async function connect() {
+            updateConnectionStatus(false);
+            loading.style.display = 'block';
+            error.style.display = 'none';
+
+            try {
+                // Запрос списка мониторов
+                const response = await fetch('/monitors', {
+                    signal: createTimeoutSignal(3000)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                monitorsData = data.monitors || [];
+
+                // Создание кнопок мониторов с реальными данными
+                createMonitorButtons(monitorsData);
+
+                // Автоматический выбор первого монитора
+                if (monitorsData.length > 0) {
+                    await selectMonitor(monitorsData[0].id);
+                }
+
+                updateConnectionStatus(true);
+                loading.style.display = 'none';
+
+            } catch (err) {
+                console.error('Connection error:', err);
+                loading.style.display = 'none';
+                error.style.display = 'block';
+                updateConnectionStatus(false);
+            }
+        }
+
+        // Создание кнопок мониторов с реальными данными
+        function createMonitorButtons(monitors) {
+            const container = document.getElementById("monitors");
+            container.innerHTML = "";
+
+            monitors.forEach(monitor => {
+                const button = document.createElement("button");
+                button.className = "monitor-btn";
+                button.textContent = `Монитор ${monitor.id + 1} (${monitor.width}x${monitor.height})`;
+                button.dataset.id = monitor.id;
+                button.onclick = () => selectMonitor(monitor.id);
+                container.appendChild(button);
+            });
+
+            // Обновление активной кнопки
+            updateActiveMonitorButton();
+        }
+
+        // Обновление активной кнопки монитора
+        function updateActiveMonitorButton() {
+            const buttons = document.querySelectorAll('.monitor-btn');
+            buttons.forEach(btn => {
+                const isActive = currentMonitor !== null && btn.dataset.id === String(currentMonitor);
+                btn.classList.toggle('active', isActive);
+            });
+        }
+
+        // Выбор монитора
+        async function selectMonitor(id) {
+            stopStreaming();
+
+            // Обновляем выбранный монитор
+            currentMonitor = id;
+
+            // Находим данные выбранного монитора
+            const monitorInfo = monitorsData.find(m => m.id === id);
+            currentMonitorEl.textContent = id + 1;
+
+            if (monitorInfo) {
+                // Предустанавливаем размер canvas
+                canvas.width = monitorInfo.width;
+                canvas.height = monitorInfo.height;
+                resolution.textContent = `${monitorInfo.width}x${monitorInfo.height}`;
+            }
+
+            updateActiveMonitorButton();
+
+            // Отправляем POST запрос для выбора монитора и качества
+            await sendScreenSelection(id, quality);
+
+            // Запускаем стриминг
+            startStreaming();
+        }
+
+        // Отправка POST запроса для выбора монитора и качества
+        async function sendScreenSelection(monitorId, qualityValue) {
+            try {
+                const response = await fetch(`/select_screen?monitor_id=${monitorId}&quality=${qualityValue}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    signal: createTimeoutSignal(3000)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                if (!result.ok) {
+                    throw new Error('Server responded with error');
+                }
+
+                console.log(`Screen selection updated: monitor=${monitorId}, quality=${qualityValue}`);
+                return true;
+
+            } catch (err) {
+                console.error('Failed to update screen selection:', err);
+                throw err;
+            }
+        }
+
+        // Начало потоковой передачи
+        function startStreaming() {
+            if (isStreaming || currentMonitor === null) return;
+            isStreaming = true;
+            frameCount = 0;
+            lastTime = performance.now();
+
+            // Сразу запрашиваем первый кадр
+            loadFrame();
+
+            // Затем запускаем интервал для регулярных запросов
+            startFrameInterval();
+        }
+
+        // Запуск интервала для запросов раз в секунду
+        function startFrameInterval() {
+            if (frameTimer) {
+                clearInterval(frameTimer);
+            }
+
+            frameTimer = setInterval(() => {
+                if (isStreaming && currentMonitor !== null) {
+                    loadFrame();
+                } else {
+                    clearInterval(frameTimer);
+                    frameTimer = null;
+                }
+            }, FRAME_INTERVAL);
+        }
+
+        // Загрузка кадра (без параметров, так как выбор сделан через POST)
+        async function loadFrame() {
+            if (!isStreaming || currentMonitor === null) return;
+
+            abortController = new AbortController();
+
+            try {
+                // Простой GET запрос без параметров
+                const url = `/screenshot?_t=${Date.now()}`;
+
+                const startTime = performance.now();
+                const response = await fetch(url, {
+                    signal: abortController.signal,
+                    cache: 'no-store',
+                    // Добавляем таймаут для запроса
+                    signal: createTimeoutSignal(5000)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const blob = await response.blob();
+                const bitmap = await createImageBitmap(blob);
+
+                // Обновление разрешения (на всякий случай)
+                canvas.width = bitmap.width;
+                canvas.height = bitmap.height;
+                resolution.textContent = `${bitmap.width}x${bitmap.height}`;
+
+                // Отрисовка кадра
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(bitmap, 0, 0);
+                bitmap.close();
+
+                // Расчёт FPS
+                const frameTime = performance.now() - startTime;
+                lastFrameTime = frameTime;
+                avgFrameTime = (avgFrameTime * 0.7) + (frameTime * 0.3);
+
+                // Обновляем FPS раз в секунду
+                frameCount++;
+                const now = performance.now();
+                if (now - lastTime >= 1000) {
+                    fps = Math.round(frameCount * 1000 / (now - lastTime));
+                    fpsValue.textContent = fps;
+                    frameCount = 0;
+                    lastTime = now;
+                }
+
+                retryCount = 0;
+
+            } catch (err) {
+                if (err.name !== 'AbortError' && err.name !== 'TimeoutError') {
+                    retryCount++;
+                    console.warn(`Frame load error (${retryCount}/${maxRetries}):`, err);
+
+                    if (retryCount >= maxRetries) {
+                        console.error('Max retries reached, stopping stream');
+                        stopStreaming();
+                        error.style.display = 'block';
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Остановка потоковой передачи
+        function stopStreaming() {
+            isStreaming = false;
+
+            // Останавливаем интервал
+            if (frameTimer) {
+                clearInterval(frameTimer);
+                frameTimer = null;
+            }
+
+            abortController?.abort();
+            updateConnectionStatus(false);
+            currentMonitorEl.textContent = '-';
+            fpsValue.textContent = '0';
+            updateActiveMonitorButton();
+        }
+
+        // Полная остановка
+        function stop() {
+            stopStreaming();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            currentMonitor = null;
+            retryCount = 0;
+        }
+
+        // Создание сигнала таймаута
+        function createTimeoutSignal(ms) {
+            const controller = new AbortController();
+            setTimeout(() => controller.abort(), ms);
+            return controller.signal;
+        }
+
+        // Обработчики качества
+        qualityInput.addEventListener('input', async (e) => {
+            const newQuality = parseInt(e.target.value);
+            quality = newQuality;
+            qualityValue.textContent = `${quality}%`;
+
+            // Если есть активный монитор, отправляем обновление качества
+            if (currentMonitor !== null && isStreaming) {
+                try {
+                    await sendScreenSelection(currentMonitor, newQuality);
+                    console.log(`Quality updated to ${newQuality}%`);
+                } catch (err) {
+                    console.error('Failed to update quality:', err);
+                    // Возвращаем значение обратно
+                    qualityInput.value = quality;
+                    qualityValue.textContent = `${quality}%`;
+                }
+            }
+        });
+
+        // Автоматическое подключение при загрузке страницы
+        window.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                connect();
+            }, 500);
+        });
+
+        // Обработка закрытия страницы
+        window.addEventListener('beforeunload', () => {
+            stopStreaming();
+        });
+    </script>
+</body>
+
+</html>
