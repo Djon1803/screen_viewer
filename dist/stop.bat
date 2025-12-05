@@ -1,4 +1,6 @@
 @echo off
+chcp 65001 >nul
+
 REM ---- Убираем задачу из планировщика ----
 schtasks /delete /tn "KsServer" /f
 

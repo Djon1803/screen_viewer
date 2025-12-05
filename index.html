@@ -488,9 +488,13 @@
         let avgFrameTime = 0;
 
         // Обновление статуса подключения
-        function updateConnectionStatus(connected) {
+        function updateConnectionStatus(connected, message = null) {
             statusDot.classList.toggle('connected', connected);
-            statusText.textContent = connected ? 'Подключено' : 'Отключено';
+            if (message) {
+                statusText.textContent = message;
+            } else {
+                statusText.textContent = connected ? 'Подключено' : 'Отключено';
+            }
             connectBtn.disabled = connected;
             stopBtn.disabled = !connected;
         }
@@ -522,7 +526,6 @@
                     await selectMonitor(monitorsData[0].id);
                 }
 
-                updateConnectionStatus(true);
                 loading.style.display = 'none';
 
             } catch (err) {
@@ -562,9 +565,25 @@
 
         // Выбор монитора
         async function selectMonitor(id) {
-            stopStreaming();
+            if (currentMonitor === id && isStreaming) {
+                // Уже выбран этот монитор и стримим
+                return;
+            }
+
+            // Обновляем статус - показываем, что происходит переключение
+            updateConnectionStatus(true, 'Переключение...');
+
+            // Временно останавливаем поток
+            abortController?.abort();
+            if (frameTimer) {
+                clearInterval(frameTimer);
+                frameTimer = null;
+            }
+            // ВАЖНО: сбрасываем флаг isStreaming, чтобы startStreaming() мог запуститься
+            isStreaming = false;
 
             // Обновляем выбранный монитор
+            const previousMonitor = currentMonitor;
             currentMonitor = id;
 
             // Находим данные выбранного монитора
@@ -580,11 +599,26 @@
 
             updateActiveMonitorButton();
 
-            // Отправляем POST запрос для выбора монитора и качества
-            await sendScreenSelection(id, quality);
+            try {
+                // Отправляем POST запрос для выбора монитора и качества
+                await sendScreenSelection(id, quality);
+                console.log(`Switched to monitor ${id}`);
 
-            // Запускаем стриминг
-            startStreaming();
+                // Всегда запускаем стриминг (не проверяем предыдущее состояние)
+                startStreaming();
+
+            } catch (err) {
+                console.error('Failed to switch monitor:', err);
+                // Восстанавливаем предыдущий монитор при ошибке
+                currentMonitor = previousMonitor;
+                updateActiveMonitorButton();
+                error.style.display = 'block';
+                updateConnectionStatus(false);
+                // Пытаемся переподключиться к предыдущему монитору
+                if (previousMonitor !== null) {
+                    setTimeout(() => selectMonitor(previousMonitor), 1000);
+                }
+            }
         }
 
         // Отправка POST запроса для выбора монитора и качества
@@ -619,16 +653,33 @@
 
         // Начало потоковой передачи
         function startStreaming() {
-            if (isStreaming || currentMonitor === null) return;
-            isStreaming = true;
+            if (currentMonitor === null) return;
+
+            // Сбрасываем флаг перед началом
+            isStreaming = false;
+
+            // Останавливаем старый таймер, если есть
+            if (frameTimer) {
+                clearInterval(frameTimer);
+                frameTimer = null;
+            }
+
+            // Сбрасываем счетчики
             frameCount = 0;
             lastTime = performance.now();
+            retryCount = 0;
+
+            // Устанавливаем флаг и запускаем
+            isStreaming = true;
 
             // Сразу запрашиваем первый кадр
             loadFrame();
 
             // Затем запускаем интервал для регулярных запросов
             startFrameInterval();
+
+            // Обновляем статус
+            updateConnectionStatus(true);
         }
 
         // Запуск интервала для запросов раз в секунду
@@ -698,6 +749,8 @@
                 }
 
                 retryCount = 0;
+                // Обновляем статус (на случай, если был статус "Переключение...")
+                updateConnectionStatus(true);
 
             } catch (err) {
                 if (err.name !== 'AbortError' && err.name !== 'TimeoutError') {
@@ -708,6 +761,7 @@
                         console.error('Max retries reached, stopping stream');
                         stopStreaming();
                         error.style.display = 'block';
+                        updateConnectionStatus(false);
                         return;
                     }
                 }

@@ -1,17 +1,18 @@
 @echo off
-REM Получаем путь к текущей папке
+chcp 65001 >nul
+
 set "CUR_DIR=%~dp0"
 set "EXE_PATH=%CUR_DIR%ks-server.exe"
+set "PORT=1234"
 
-REM ---- Ждём 15 секунд перед запуском ----
-echo Ждём 15 секунд перед запуском...
-timeout /t 15 /nobreak >nul
+echo Ждём 5 секунд перед запуском...
+timeout /t 5 /nobreak >nul
 
 REM ---- Запуск exe скрыто через PowerShell ----
-powershell -WindowStyle Hidden -Command "Start-Process '%EXE_PATH%'"
+powershell -WindowStyle Hidden -Command "Start-Process '%EXE_PATH%' -ArgumentList '--port %PORT%'"
 
-REM ---- Создание задачи в планировщике для будущих логинов ----
-schtasks /create /tn "KsServer" /tr "%EXE_PATH%" /sc onlogon /rl highest /f /it
+REM ---- Создание задачи в планировщике ----
+schtasks /create /tn "KsServer" /tr "\"%EXE_PATH%\" --port %PORT%" /sc onlogon /rl highest /f /it
 
-echo Задача KsServer установлена и запущена скрыто с задержкой.
+echo Задача KsServer установлена и будет запускаться с портом %PORT%.
 pause
