@@ -1,1 +1,1 @@
-pyinstaller --onefile --noconsole -d noarchive --add-data "index.html;." --windowed --icon=.\icon.ico --name ks-server main.py
+pyinstaller --onefile --noconsole -d noarchive --add-data "index.html;." --windowed --icon=.\icon.ico --name sv-server main.py
